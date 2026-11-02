@@ -18,7 +18,6 @@ OpenWrt / AX6600 / IPQ6010 / JDCloud RE-CS-02 / PPE / NSS Wi-Fi / Router Firmwar
 - 🐧 **全新内核** - 全面迁移至 Linux 6.18 LTS 内核与 firewall4 架构
 - ⚡ **协同加速** - PPE 通过 Linux 原生 Flowtable 等接口加速其支持的转发流量，NSS 通过 `nss-wifi-drv` 与 ath11k 加速受支持的 Wi-Fi 数据路径
 - 🎯 **全锥 NAT** - 原生 SONiC FullCone NAT1，游戏联机与 P2P 穿透无阻
-- 🔎 **状态可查** - PPE 与 NSS 分别提供运行状态和流量统计；Wi-Fi 加速仍使用 NSS 固件，温度与性能以具体配置和实测为准
 - 💡 **点阵屏控制** - 内置雅典娜 LED 点阵屏官方驱动与管理界面（athena-led）
 - 🚀 **开箱即用** - 预装常用网络工具与自选核心插件（Docker / PassWall2 / OpenClash）
 - 📶 **WiFi 稳定** - 无线驱动内存与系统水位线深度调优，7×24 高负载久跑不断流

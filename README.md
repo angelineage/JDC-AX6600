@@ -1,7 +1,7 @@
-# 🚀 OpenWrt AX6600 / IPQ60xx Router Firmware (Cloud Build + PPE Acceleration)
+# 🚀 OpenWrt AX6600 / IPQ60xx Router Firmware (Cloud Build + PPE / NSS Wi-Fi Acceleration)
 
-OpenWrt / AX6600 / IPQ6010 / JDCloud RE-CS-02 / PPE / Router Firmware / Cloud Build
-> 基于 OpenWrt / ImmortalWrt 的定制固件，适配 JDCloud RE-CS-02（京东云雅典娜 AX6600），全面迁移至 Linux 6.18 LTS 内核，集成 Qualcomm PPE 开源硬件加速、SONiC FullCone NAT1 与 GitHub Actions 极速云编译
+OpenWrt / AX6600 / IPQ6010 / JDCloud RE-CS-02 / PPE / NSS Wi-Fi / Router Firmware / Cloud Build
+> 基于 OpenWrt / ImmortalWrt 的定制固件，适配 JDCloud RE-CS-02（京东云雅典娜 AX6600），全面迁移至 Linux 6.18 LTS 内核，采用 Qualcomm PPE + NSS Wi-Fi 协同加速架构，集成 SONiC FullCone NAT1 与 GitHub Actions 云编译
 
 [![Stars](https://img.shields.io/github/stars/ones20250/Openwrt-AX6600?style=flat&logo=github&label=Stars)](https://github.com/ones20250/Openwrt-AX6600/stargazers)
 [![Downloads](https://img.shields.io/github/downloads/ones20250/Openwrt-AX6600/total?logo=github&label=%E4%B8%8B%E8%BD%BD%E9%87%8F)](https://github.com/ones20250/Openwrt-AX6600/releases)
@@ -16,9 +16,9 @@ OpenWrt / AX6600 / IPQ6010 / JDCloud RE-CS-02 / PPE / Router Firmware / Cloud Bu
 - 🔥 **云编译构建** - 基于 GitHub Actions 完全自动化极速编译（宿主工具穿透与缓存优化）
 - 📦 **官方支持** - 完美适配京东云雅典娜AX6600（RE-CS-02）
 - 🐧 **全新内核** - 全面迁移至 Linux 6.18 LTS 内核与 firewall4 架构
-- ⚡ **硬件加速** - Qualcomm PPE 开源硬件加速 + Linux 原生 Flowtable 硬件卸载
+- ⚡ **协同加速** - PPE 通过 Linux 原生 Flowtable 等接口加速其支持的转发流量，NSS 通过 `nss-wifi-drv` 与 ath11k 加速受支持的 Wi-Fi 数据路径
 - 🎯 **全锥 NAT** - 原生 SONiC FullCone NAT1，游戏联机与 P2P 穿透无阻
-- ❄️ **低温运行** - 移除 NSS 闭源高发热组件，待机温度显著降低 5~10℃
+- 🔎 **状态可查** - PPE 与 NSS 分别提供运行状态和流量统计；Wi-Fi 加速仍使用 NSS 固件，温度与性能以具体配置和实测为准
 - 💡 **点阵屏控制** - 内置雅典娜 LED 点阵屏官方驱动与管理界面（athena-led）
 - 🚀 **开箱即用** - 预装常用网络工具与自选核心插件（Docker / PassWall2 / OpenClash）
 - 📶 **WiFi 稳定** - 无线驱动内存与系统水位线深度调优，7×24 高负载久跑不断流
@@ -83,16 +83,16 @@ Releases 页面每个版本包含以下文件（PURE 与 PLUS 分开发布，Rel
 
 > [!IMPORTANT]
 > ### 架构升级与系统升级注意事项
-> 本次迁移全面切换至 **Qualcomm PPE 开源硬件加速** 架构，并修正了 LuCI 防火墙管理界面包名（启用内嵌于 firewall4 的 SONiC FullCone NAT1）。
+> 当前采用 **PPE + NSS Wi-Fi 协同加速** 架构：PPE 使用开源驱动与 Linux 原生卸载接口，Wi-Fi 加速由 `nss-wifi-drv`、ath11k 和 NSS 固件配合完成；同时启用内嵌于 firewall4 的 SONiC FullCone NAT1。
 > - **目标分区红线**：本次 PLUS 升级包约 160MB，升级前必须核实目标系统分区（`rootfs`）已扩容（大于 200MB，原厂 60MB 分区绝对不能刷入 PLUS 版，不能以整机 eMMC 存储容量误判）。
 > - **Docker 数据保护**：`sysupgrade` 默认会重置内部 Flash 的 overlay 分区，**保留配置不等于保留整个 overlay**！若 Docker 数据位于内部 overlay，升级前必须完整导出到电脑；若位于独立分区，升级后必须先核验挂载再启动 Docker。
-> - **平滑保留配置升级**：可保留现有网络、Wi-Fi、DHCP、防火墙与用户规则，升级后仅需精准清理失效的 NSS 专用节（如 `firewall.qcanssecm`），无需为了启用 PPE 而覆盖整份旧防火墙配置。
+> - **平滑保留配置升级**：可保留现有网络、Wi-Fi、DHCP、防火墙与用户规则，升级后仅精准清理旧版 NSS / ECM 架构中已失效的配置节（如 `firewall.qcanssecm`），不要误删当前 NSS Wi-Fi 使用的 `nss-wifi` 配置；无需为了启用 PPE 而覆盖整份旧防火墙配置。
 > - **跨架构新手建议**：若旧版系统配置过度杂乱或曾做过重度魔改，建议导出备份后选择不保留配置升级（`sysupgrade -n 固件文件名.bin`），待进入系统确认正常后再导入配置。
 
 > ⚠️ **重要提示：** 以下操作涉及 U-Boot 和分区修改，**请务必先备份重要数据**，谨慎操作！
 
 ### 详细教程
-- 📖 **[保留配置升级与 Docker 备份恢复指南 →](Docs/AX6600保留配置升级与Docker备份恢复指南.md)**（升级前分区体检 / Docker 数据全量备份 / 保留配置升级 / NSS 遗留项精准清理 / 验收全流程）
+- 📖 **[保留配置升级与 Docker 备份恢复指南 →](Docs/AX6600保留配置升级与Docker备份恢复指南.md)**（升级前分区体检 / Docker 数据全量备份 / 保留配置升级 / 旧版 NSS / ECM 遗留项精准清理 / 验收全流程）
 - 📖 **[完整刷机救砖教程 →](Docs/刷机救砖教程.md)**（开 SSH / 备份分区 / 刷 U-Boot / 9008 救砖全流程，推荐新手通读）
 
 ### 刷机前必读
@@ -246,18 +246,51 @@ Releases 页面每个版本包含以下文件（PURE 与 PLUS 分开发布，Rel
 
 ---
 
+## ⚡ PPE + NSS Wi-Fi 加速架构
+
+PPE 与 NSS 可以同时启用，分别承担不同的转发任务；启用 PPE 不等于移除全部 NSS 组件。
+
+| 路径 | 主要组件 | 作用 |
+|------|----------|------|
+| **PPE 硬件卸载** | `qca_ppe`、Linux Flowtable 等原生接口 | 加速受支持的有线转发、路由 / NAT 等流量 |
+| **NSS Wi-Fi 加速** | `nss-wifi-drv`、ath11k、NSS 固件 | 加速受支持的 Wi-Fi 数据路径及含 Wi-Fi 端的转发流量 |
+
+不再使用旧版 `kmod-qca-nss-*` / ECM 组件，不代表没有运行 NSS 固件。PPE 驱动与 NSS Wi-Fi 主机侧驱动可公开查看源码，但 NSS Wi-Fi 加速仍依赖闭源固件，不能描述为“完全移除 NSS 闭源微码”。具体加速范围取决于编译所用的上游版本、无线设备、协议和网络配置，不能由开关已启用推断所有流量均已卸载。
+
+2026-11-02 对 RE-CS-02 运行固件 `r0-2d5dff1` 的实机检查确认：PPE 与 NSS Wi-Fi 均已启用，PPE 有活动硬件流，NSS 核心运行固件 12.5，两路 Wi-Fi 的 NSS 收发计数持续增长。该记录是此版本的运行快照，不代表所有构建或后续版本都具有相同状态。
+
+### 检查运行状态
+
+通过 SSH 以 root 身份执行以下只读命令（需要固件提供相应 debugfs 接口）：
+
+```sh
+# PPE：卸载配置、硬件活动流、卸载与异常统计
+uci show firewall | grep flow_offloading
+cat /sys/kernel/debug/3a000000.ppe/active_flows
+cat /sys/kernel/debug/3a000000.ppe/offload
+
+# NSS：配置、驱动开关、核心、已安装转发流及 Wi-Fi 收发统计
+uci show nss-wifi
+cat /sys/module/ath11k/parameters/nss_offload
+cat /sys/kernel/debug/39000000.nss/boot
+cat /sys/kernel/debug/39000000.nss/flows
+cat /sys/kernel/debug/39000000.nss/wifili_rx
+```
+
+`nss_offload` 为 `Y` / `1` 且 NSS `boot` 为 `1`，表示驱动加速已启用且核心已启动；还应结合已安装流及持续增长的收发计数判断实际转发。PPE 的 `ingress_not_switch_port` 等路径拒绝计数，仅说明该次请求不满足 PPE 卸载条件，不等同于网络丢包，也不能单独用于判断 NSS Wi-Fi 加速失败。
+
 ## 📊 固件特性对比
 
 | 特性 | 原厂固件 | 本项目固件 |
 |------|---------|----------|
 | **OpenWrt 版本** | 不支持 | ✅ Linux 6.18 LTS / firewall4 |
-| **硬件加速** | ⚠️ 原厂闭源 NSS 架构 | ✅ Qualcomm PPE 开源硬件加速 + Flowtable 硬件卸载（免除 NSS 闭源微码常驻开销） |
+| **硬件加速** | ⚠️ 原厂闭源 NSS 架构 | ✅ PPE + Linux Flowtable 硬件卸载，并由 NSS Wi-Fi 加速受支持的无线数据路径 |
 | **NAT 模式** | 普通锥型 NAT | ✅ 原生 SONiC FullCone NAT1（集成于 firewall4） |
 | **网络性能** | 基础 | ✅ 千兆 / 2.5G 双工硬件流表卸载（支持常见单向/双向流卸载） |
 | **自定义插件** | ❌ 不支持 | ✅ 完全支持（Docker / PassWall2 / OpenClash 开箱即用） |
 | **构建速度** | ❌ 慢 | ✅ CI 宿主工具穿透与预编译优化（跳过 Go/Rust 引导工具链源码编译） |
 | **定期更新** | ❌ 不定期 | ✅ 自动跟进上游 owrt 分支云编译 |
-| **开源透明** | ❌ 闭源 | ✅ 全开源公开 |
+| **开源透明** | ❌ 闭源 | ✅ 构建脚本与主机侧开源驱动可审查；NSS Wi-Fi 仍依赖闭源固件 |
 
 ---
 

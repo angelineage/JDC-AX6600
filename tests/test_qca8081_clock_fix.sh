@@ -55,7 +55,6 @@ run_helper
 grep -q 'ret = clk_set_parent(rcg, parent);' "$TREE/$DRIVER"
 grep -q 'ret = ppe_port_clk_parents(priv);' "$TREE/$DRIVER"
 test -s "$TREE/target/linux/qualcommax/patches-6.18/0918-clk-qcom-gcc-ipq6018-keep-port-5-on-uniphy1-at-SGMII-rates.patch"
-test -s "$TREE/target/linux/qualcommax/patches-6.18/0919-clk-qcom-gcc-ipq8074-keep-port-5-on-uniphy1-at-SGMII-rates.patch"
 snapshot > "$TMP/once"
 run_helper
 snapshot > "$TMP/twice"
@@ -128,5 +127,27 @@ else
     echo "FAIL: workflow step ordering is invalid: Clone=$CLONE_LINE, Helper=$HELPER_LINE, Feeds=$FEEDS_LINE" >&2
     exit 1
 fi
+
+# 8. 补丁目标路径白名单门禁校验（阻断任何非雅典娜 AX6600 硬件架构的补丁文件混入）
+echo "--- Test: Verify patch target files strictly match hardware whitelist ---"
+PATCH_TARGETS=$(grep -E '^diff --git a/' "$REPO_ROOT/Patches/qualcommax-qca8081-clock-fix.patch" | awk '{print $3}' | sed 's|^a/||' | sort)
+EXPECTED_TARGETS=$(printf "target/linux/qualcommax/files/drivers/net/ethernet/qualcomm/qca_ppe_main.c\ntarget/linux/qualcommax/patches-6.18/0918-clk-qcom-gcc-ipq6018-keep-port-5-on-uniphy1-at-SGMII-rates.patch" | sort)
+if [ "$PATCH_TARGETS" != "$EXPECTED_TARGETS" ]; then
+    echo "FAIL: Patch contains unexpected target files outside hardware whitelist:" >&2
+    echo "$PATCH_TARGETS" >&2
+    exit 1
+fi
+echo 'PASS: patch target files strictly match hardware whitelist'
+
+# 8b. 验证白名单对多芯片/无关芯片补丁的防御能力（反例演练）
+TMP_BAD_PATCH="$TMP/bad_patch.patch"
+cp "$REPO_ROOT/Patches/qualcommax-qca8081-clock-fix.patch" "$TMP_BAD_PATCH"
+printf "\ndiff --git a/target/linux/qualcommax/patches-6.18/0919-clk-qcom-gcc-ipq8074.patch b/target/linux/qualcommax/patches-6.18/0919-clk-qcom-gcc-ipq8074.patch\n" >> "$TMP_BAD_PATCH"
+BAD_TARGETS=$(grep -E '^diff --git a/' "$TMP_BAD_PATCH" | awk '{print $3}' | sed 's|^a/||' | sort)
+if [ "$BAD_TARGETS" = "$EXPECTED_TARGETS" ]; then
+    echo "FAIL: Whitelist failed to detect injected IPQ8074 patch target!" >&2
+    exit 1
+fi
+echo 'PASS: patch whitelist detector reliably catches unauthorized target injections'
 
 echo "=== All QCA8081 Clock Fix Regression Tests Passed! ==="

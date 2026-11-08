@@ -1,6 +1,6 @@
 # AX6600 定制固件 · GitHub Actions 云编译
 
-> 面向 **JDCloud RE-CS-02（京东云无线宝雅典娜 AX6600）** 的 ImmortalWrt 定制固件。基于 `qualcommax/ipq60xx`、Linux 6.18 LTS，启用 Qualcomm PPE 硬件卸载与 NSS Wi-Fi 加速，集成 SONiC FullCone NAT1。本仓库只负责**构建配置与自动化**，源码来自上游 ImmortalWrt 分支。
+> 面向 [![Build](https://img.shields.io/github/actions/workflow/status/angelineage/JDC-AX6600/QCA-ALL.yml?branch=main&label=Build)](https://github.com/angelineage/JDC-AX6600/actions/workflows/QCA-ALL.yml)**JDCloud RE-CS-02（京东云无线宝雅典娜 AX6600）** 的 ImmortalWrt 定制固件。基于 `qualcommax/ipq60xx`、Linux 6.18 LTS，启用 Qualcomm PPE 硬件卸载与 NSS Wi-Fi 加速，集成 SONiC FullCone NAT1。本仓库只负责**构建配置与自动化**，源码来自上游 ImmortalWrt 分支。
 
 [![Stars](https://img.shields.io/github/stars/angelineage/JDC-AX6600?style=flat&logo=github&label=Stars)](https://github.com/angelineage/JDC-AX6600/stargazers)
 [![Build](https://github.com/angelineage/JDC-AX6600/actions/workflows/QCA-ALL.yml/badge.svg)](https://github.com/angelineage/JDC-AX6600/actions/workflows/QCA-ALL.yml)

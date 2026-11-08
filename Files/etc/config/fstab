@@ -1,0 +1,15 @@
+# 由仓库 Files/ 在编译期注入 rootfs 的默认 /etc/config/fstab。
+# 目的：preinit 阶段 fstools/block 需要一份可被 UCI 正常加载的 fstab；
+# ROM 中缺失时会出现 "block: unable to load configuration (fstab: Entry not found)"。
+#
+# 这里只声明 global 策略，不写死任何分区 UUID（每台设备不同）。
+# 需要挂载数据分区时，用 `block detect > /etc/config/fstab` 生成，
+# 或保留配置升级（sysupgrade -c）直接沿用设备 overlay 中已有的 fstab。
+
+config global
+	option anon_swap '1'
+	option anon_mount '1'
+	option auto_swap '1'
+	option auto_mount '1'
+	option delay_root '5'
+	option check_fs '0'

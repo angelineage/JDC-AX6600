@@ -40,7 +40,7 @@ on:
       WRT_PROFILE:
         required: false
         type: string
-        default: PURE
+        default: PLUS
       WRT_TEST:
         required: false
         type: string
@@ -59,7 +59,7 @@ env:
   WRT_SOURCE: ${{inputs.WRT_SOURCE}}
   WRT_PACKAGE: ${{inputs.WRT_PACKAGE}}
   WRT_PROFILE: ${{inputs.WRT_PROFILE}}
-  WRT_PKG_INFO: 无（纯净版不集成外部插件）
+  WRT_PKG_INFO: 见本 Release 的 Packages-*.txt
   WRT_TEST: ${{inputs.WRT_TEST}}
 
 jobs:
@@ -102,7 +102,8 @@ jobs:
 
       - name: Initialization Values
         run: |
-          echo "WRT_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")" >> $GITHUB_ENV
+          WRT_DATE=$(TZ=UTC-8 date +"%y.%m.%d-%H.%M.%S")
+          echo "WRT_DATE=$WRT_DATE" >> $GITHUB_ENV
           echo "WRT_MARK=${GITHUB_REPOSITORY%%/*}" >> $GITHUB_ENV
           WRT_PROFILE_UPPER=$(echo "${WRT_PROFILE:-PURE}" | tr '[:lower:]' '[:upper:]')
           case "$WRT_PROFILE_UPPER" in
@@ -110,6 +111,9 @@ jobs:
             *) echo "Unsupported WRT_PROFILE: $WRT_PROFILE" >&2; exit 1 ;;
           esac
           echo "WRT_PROFILE=$WRT_PROFILE_UPPER" >> $GITHUB_ENV
+          # 统一产物命名：<CONFIG>-<PROFILE>-angelineage-athena-<编译日期>-<编译时间>
+          # WRT_DATE 形如 26.11.08-10.30.00（TZ=UTC-8 的编译开始时间）
+          echo "WRT_TAG=${WRT_CONFIG}-${WRT_PROFILE_UPPER}-angelineage-athena-${WRT_DATE}" >> $GITHUB_ENV
           if [[ "$WRT_PROFILE_UPPER" == "PLUS" ]]; then
             echo "WRT_PROFILE_DESC=Plus 版，预装 OpenClash、PassWall2、Docker/Dockerman、AdGuard Home、DDNS、ttyd、UPnP 及分区扩容、网络唤醒等实用插件，刷完即用；启用 AdGuard Home 与代理插件前请先阅读 README 的「PLUS 版使用提示」" >> $GITHUB_ENV
           else
@@ -146,6 +150,17 @@ jobs:
           cd ./wrt/
           bash "$GITHUB_WORKSPACE/.github/scripts/prepare-qca8081-clock-fix.sh"
 
+      - name: Install Custom RootFS Files
+        run: |
+          # OpenWrt buildroot 的 files/ 机制：编译时原样并入 rootfs。
+          # Files/etc/config/fstab 提供一份默认 fstab，消除 preinit 阶段
+          # "block: unable to load configuration (fstab: Entry not found)" 告警。
+          # 保留配置升级时以设备 overlay 中的 /etc/config/fstab 为准，不会被覆盖。
+          cd ./wrt/
+          mkdir -p ./files/
+          cp -a "$GITHUB_WORKSPACE/Files/." ./files/
+          find ./files -type f -print | sort
+
       - name: Check Scripts
         run: |
           find ./ -maxdepth 3 -type f -iregex ".*\(txt\|sh\)$" -exec dos2unix {} \; -exec chmod +x {} \;
@@ -158,7 +173,7 @@ jobs:
           WRT_SUBTARGET=$(grep -m 1 -oP "^CONFIG_TARGET_${WRT_TARGET}_\K[\w]+(?=\=y)" "./Config/$WRT_CONFIG.txt")
           WRT_CACHE_SOURCE=${WRT_SOURCE//\//-}
           WRT_CACHE_BRANCH=${WRT_BRANCH//\//-}
-          # 保留目标硬件配置名($WRT_CONFIG)隔离；固件版本($WRT_PROFILE)不加入键，PURE/PLUS 共用工具链与 ccache 缓存
+          # 保留目标硬件配置名($WRT_CONFIG)隔离；当前仅构建 PLUS 单版本，缓存键不含版本标识
           WRT_CACHE_PREFIX="wrt-$WRT_CACHE_SOURCE-$WRT_CACHE_BRANCH-$WRT_TARGET-$WRT_SUBTARGET-$WRT_CONFIG"
           WRT_CACHE_KEY="$WRT_CACHE_PREFIX-$(git -C ./wrt rev-parse HEAD)"
           WRT_CACHE_STARTED=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -177,7 +192,7 @@ jobs:
         if: env.WRT_TEST != 'true'
         uses: actions/cache/restore@v4
         with:
-          # 缓存内容（ccache/宿主工具/工具链）与 profile 无关，PURE 和 PLUS 共享同一份，避免缓存翻倍挤占配额
+          # 缓存内容（ccache/宿主工具/工具链）与 profile 无关，单版本构建不会让缓存翻倍挤占配额
           key: ${{env.WRT_CACHE_KEY}}
           # 迁移时仅回退到同一源码提交的旧键，避免旧前缀混用其他分支。
           restore-keys: |
@@ -403,9 +418,9 @@ jobs:
         run: |
           cd ./wrt/ && mkdir -p ./upload/
 
-          cp -f ./.config ./upload/Config-"$WRT_CONFIG"-"$WRT_PROFILE"-"$WRT_INFO"-"$WRT_BRANCH"-"$WRT_DATE".txt
+          cp -f ./.config ./upload/Config-"$WRT_TAG".txt
           if [ -s "$GITHUB_WORKSPACE/package-versions.txt" ]; then
-            cp -f "$GITHUB_WORKSPACE/package-versions.txt" ./upload/Packages-"$WRT_CONFIG"-"$WRT_PROFILE"-"$WRT_INFO"-"$WRT_BRANCH"-"$WRT_DATE".txt
+            cp -f "$GITHUB_WORKSPACE/package-versions.txt" ./upload/Packages-"$WRT_TAG".txt
           fi
 
           if [[ $WRT_TEST != 'true' ]]; then
@@ -419,7 +434,7 @@ jobs:
               NAME=$(basename $FILE | cut -d '.' -f 1 | grep -io "\($WRT_TARGET\).*")
               # 去掉恒定的平台前缀（qualcommax-），保留 ipq60xx 及设备型号
               NAME=${NAME#*-}
-              NEW_FILE="$WRT_INFO"-"$WRT_BRANCH"-"${WRT_PROFILE,,}"-"$NAME"-"$WRT_DATE"."$EXT"
+              NEW_FILE="$WRT_TAG"-"$NAME"."$EXT"
               mv -f $FILE ./upload/$NEW_FILE
             done
 
@@ -443,16 +458,18 @@ jobs:
             echo "- Target: \`$WRT_TARGET\`"
             echo "- Firmware mode: \`$WRT_WIFI\`"
             echo "- Build time: \`$WRT_DATE\`"
+            echo "- Release tag: \`$WRT_TAG\`"
             echo "- Kernel: \`$WRT_KVER\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Release Firmware
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.WRT_CONFIG }}-${{ env.WRT_PROFILE }}-${{ env.WRT_INFO }}-${{ env.WRT_BRANCH }}-${{ env.WRT_DATE }}
+          name: ${{ env.WRT_TAG }}
+          tag_name: ${{ env.WRT_TAG }}
           files: ./wrt/upload/*.*
           body: |
-            📦 OpenWrt 自动编译固件（AX6600 / IPQ6010）
+            📦 AX6600 / IPQ60xx 定制固件（仅 PLUS 版，手动编译）
             ━━━━━━━━━━━━━━━━━━━━━━━
 
             📌 基本信息
@@ -469,7 +486,7 @@ jobs:
             ━━━━━━━━━━━━━━━━━━━━━━━
 
             🧩 设备与平台
-            设备型号：${{ env.WRT_SOURCE }}
+            设备型号：JDCloud RE-CS-02（京东云无线宝雅典娜 AX6600）
             硬件平台：${{ env.WRT_TARGET }}
             CPU架构：Qualcomm IPQ6010 / IPQ60xx
             ━━━━━━━━━━━━━━━━━━━━━━━
@@ -479,7 +496,7 @@ jobs:
             - SONiC FullCone NAT1 游戏穿透支持
             - 基于 Linux 6.18 LTS 内核 / firewall4 架构
             - 常用 LuCI 插件预集成
-            - 云端自动编译更新与极速构建优化
+            - GitHub Actions 手动触发云编译，宿主工具穿透与缓存优化
             - 支持自定义配置构建
             ━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -491,19 +508,19 @@ jobs:
             WiFi 密码：${{ env.WRT_WORD }}
             ━━━━━━━━━━━━━━━━━━━━━━━
 
-            📶 WiFi 推荐设置（雅典娜三频三 WiFi）
-            - 2.4G（2×2）：信道 11，带宽 20MHz
-            - 5G-1 游戏频段（4×4）：信道 44，带宽 160MHz（无法开启或断流则回退 80MHz）
-            - 5G-2 影音频段（2×2）：信道 149，带宽 80MHz
-            - 通用：地区 US，发射功率 24 dBm，加密 WPA2-PSK（CCMP 算法）
+            📶 WiFi 当前构建默认
+            - 2.4G（phy1）：信道 11，HE20，20 dBm
+            - 5G（phy0）：信道 149，HE80，22 dBm
+            - 第三射频（QCN9074 / HE160 / AirPort）默认禁用，需自行在 /etc/config/wireless 启用
+            - 通用：地区 US，加密 sae-mixed（WPA3/WPA2 混合），CCMP
             ━━━━━━━━━━━━━━━━━━━━━━━
             📥 下载与刷机说明
-            - 本 Release 为 ${{ env.WRT_PROFILE }} 版固件；两个版本分开发布，请从 README 下载入口按需选择
+            - 本项目仅发布 PLUS 单版本固件，不再构建 PURE 版
             - 首次从原厂固件刷入：选文件名带 factory 的文件
             - 已是 OpenWrt/ImmortalWrt 升级：选文件名带 sysupgrade 的文件
             - 刷机 / 救砖完整教程：[刷机救砖教程](${{ github.server_url }}/${{ github.repository }}/blob/main/Docs/刷机救砖教程.md)
             - Config-*.txt：本次编译的完整 .config 配置，便于复现或二次定制
-            - Packages-*.txt：外部插件（OpenClash / PassWall2 等）的仓库、分支与 commit 记录（纯净版无外部插件，无此文件）
+            - Packages-*.txt：外部插件（OpenClash / PassWall2 等）的仓库、分支与 commit 记录
             - sha256sums.txt：固件校验文件，刷机前请先校验下载完整性（方法见 README 刷机前必读）
 
             ⚠️ 风险提示

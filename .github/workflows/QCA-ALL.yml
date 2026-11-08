@@ -3,7 +3,7 @@ name: QCA-ALL
 
 #CI计划
 on:
-  #仅手动编译：不设置 schedule / workflow_run，避免自动或连带触发
+  #仅手动编译：无 schedule、无 workflow_run；提交代码不会触发编译
   workflow_dispatch:
     inputs:
       PACKAGE:
@@ -58,7 +58,7 @@ jobs:
       WRT_SOURCE: ${{matrix.SOURCE}}
       #插件调整
       WRT_PACKAGE: ${{inputs.PACKAGE}}
-      #固件版本：PURE=纯净版，PLUS=Plus 版
+      #固件版本：仅构建 PLUS 版（不再同时发布 PURE）
       WRT_PROFILE: ${{matrix.PROFILE}}
       #仅输出配置文件
       WRT_TEST: ${{inputs.TEST}}

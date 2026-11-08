@@ -26,17 +26,273 @@ apply_sed_to_matches "./feeds/luci/modules/luci-mod-system/" "flash.js" "s/192\\
 #添加编译日期标识
 apply_sed_to_matches "./feeds/luci/modules/luci-mod-status/" "10_system.js" "s/(\\(luciversion || ''\\))/(\\1) + (' \\/ $WRT_MARK-$WRT_DATE')/g"
 
-WIFI_UC="./package/network/config/wifi-scripts/files/lib/wifi/mac80211.uc"
-if [ -f "$WIFI_UC" ]; then
-	#修改WIFI名称
-	sed -i "s/ssid='.*'/ssid='$WRT_SSID'/g" "$WIFI_UC"
-	#修改WIFI密码
-	sed -i "s/key='.*'/key='$WRT_WORD'/g" "$WIFI_UC"
-	#修改WIFI地区
-	#sed -i "s/country='.*'/country='US'/g" "$WIFI_UC"
-	#修改WIFI加密
-	#sed -i "s/encryption='.*'/encryption='psk2+ccmp'/g" "$WIFI_UC"
+# =========================================================
+# WiFi 默认配置与安全加固：
+# 1. 兼容现代 ucode 模板 (mac80211.uc) 与经典 shell 模板 (mac80211.sh)，源码构建期原生植入默认配置
+# 2. 注入 uci-defaults 脚本 (99-default-wifi)，仅在全新刷机/无既有配置时生效，保留配置升级绝不破坏用户既有配置
+# =========================================================
+TARGET_SSID="${WRT_SSID:-OWRT}"
+TARGET_WORD="${WRT_WORD:-12345678}"
+
+escape_sed() {
+	local str="$1"
+	str="${str//\\/\\\\}"
+	str="${str//&/\\&}"
+	str="${str//\//\\/}"
+	printf '%s' "$str"
+}
+
+escape_ucode_str() {
+	local str="$1"
+	str="${str//\\/\\\\}"
+	str="${str//\'/\\\'}"
+	printf '%s' "$str"
+}
+
+escape_sh_uci_str() {
+	local str="$1"
+	if [[ "$str" == *"'"* ]]; then
+		str="${str//\\/\\\\}"
+		str="${str//\"/\\\"}"
+		str="${str//\$/\\\$}"
+		printf '"%s"' "$str"
+	else
+		printf "'%s'" "$str"
+	fi
+}
+
+patch_wifi_template() {
+	local TPL="$1"
+	[ -f "$TPL" ] || return 0
+	if [[ "$TPL" == *".uc" ]]; then
+		local safe_ssid safe_key
+		safe_ssid=$(escape_sed "$(escape_ucode_str "$TARGET_SSID")")
+		safe_key=$(escape_sed "$(escape_ucode_str "$TARGET_WORD")")
+		sed -i "s/ssid: ['\"][^'\"]*['\"]/ssid: '$safe_ssid'/g" "$TPL" 2>/dev/null || true
+		sed -i "s/encryption: ['\"]none['\"]/encryption: 'psk2',\n\t\tkey: '$safe_key'/g" "$TPL" 2>/dev/null || true
+		sed -i "s/disabled:[[:space:]]*1/disabled: 0,\n\t\tcountry: 'CN'/g" "$TPL" 2>/dev/null || true
+	elif [[ "$TPL" == *".sh" ]]; then
+		local safe_ssid safe_key
+		safe_ssid=$(escape_sed "$(escape_sh_uci_str "$TARGET_SSID")")
+		safe_key=$(escape_sed "$(escape_sh_uci_str "$TARGET_WORD")")
+		sed -i "s/option disabled ['\"]\?1['\"]\?/option disabled '0'\n\t\toption country 'CN'/g" "$TPL" 2>/dev/null || true
+		sed -i "s/option ssid ['\"]\?[^'\"]*['\"]\?/option ssid $safe_ssid/g" "$TPL" 2>/dev/null || true
+		sed -i "s/option encryption ['\"]\?none['\"]\?/option encryption 'psk2'\n\t\toption key $safe_key/g" "$TPL" 2>/dev/null || true
+	fi
+}
+
+MATCH_TPLS=$(find ./package ./feeds -type f \( -name "mac80211.sh" -o -name "mac80211.uc" \) 2>/dev/null || true)
+if [ -n "$MATCH_TPLS" ]; then
+	while IFS= read -r match_tpl; do
+		[ -n "$match_tpl" ] && patch_wifi_template "$match_tpl"
+	done <<< "$MATCH_TPLS"
+else
+	WIFI_UC="./package/network/config/wifi-scripts/files/lib/wifi/mac80211.uc"
+	patch_wifi_template "$WIFI_UC"
 fi
+
+WIFI_DEFAULTS_DIR="./package/base-files/files/etc/uci-defaults"
+mkdir -p "$WIFI_DEFAULTS_DIR"
+
+DEFAULT_WIFI_SCRIPT="$WIFI_DEFAULTS_DIR/99-default-wifi"
+cat << 'EOF_WIFI_HEAD' > "$DEFAULT_WIFI_SCRIPT"
+#!/bin/sh
+# 99-default-wifi: Athena AX6600 (JDCloud RE-CS-02) Default Wi-Fi Configuration
+
+SYS_PREFIX="${IPKG_INSTROOT:-${SIM_ROOT:-}}"
+
+EOF_WIFI_HEAD
+
+# 使用 printf %q 安全写入 SSID 与 KEY，彻底杜绝任何特殊字符引起的 sed 替换损坏或 shell 语法错误
+printf 'SSID=%q\nKEY=%q\n\n' "$TARGET_SSID" "$TARGET_WORD" >> "$DEFAULT_WIFI_SCRIPT"
+
+cat << 'EOF_WIFI_BODY' >> "$DEFAULT_WIFI_SCRIPT"
+# 在 rootfs 构建期 (IPKG_INSTROOT)：
+# 目标机物理射频硬件尚未探测，无线配置尚未就绪。
+# 必须退出非 0 状态以阻断 rootfs 构建阶段提前删除 (rm -f) 本初始化脚本，确保刷机后首次冷启动正常执行。
+if [ -n "$IPKG_INSTROOT" ]; then
+	[ -f "$IPKG_INSTROOT/etc/config/wireless" ] || exit 1
+fi
+
+# 检查是否为保留配置升级 (sysupgrade) 或系统已存在既有无线配置：
+# 在保留配置升级场景下，/etc/config/wireless 会在系统启动前被 sysupgrade 备份还原。
+# 出厂默认值（OWRT / 12345678）仅供全新刷机或恢复出厂设置（无既有无线配置）首次使用，
+# 严禁篡改或覆盖用户的自定义 SSID、密码、加密协议及射频参数！
+if [ -s "$SYS_PREFIX/etc/config/wireless" ] || [ -f "$SYS_PREFIX/etc/config/wireless" ]; then
+	exit 0
+fi
+
+WIFI_CMD="/sbin/wifi"
+if [ -n "$SYS_PREFIX" ] && [ -x "$SYS_PREFIX/sbin/wifi" ]; then
+	WIFI_CMD="$SYS_PREFIX/sbin/wifi"
+elif ! [ -x "$WIFI_CMD" ]; then
+	if command -v wifi >/dev/null 2>&1; then
+		WIFI_CMD="wifi"
+	else
+		exit 0
+	fi
+fi
+
+# 全新刷机 / 恢复出厂设置场景：调用 wifi config 探测并生成初始无线配置
+"$WIFI_CMD" config 2>/dev/null || true
+
+[ -s "$SYS_PREFIX/etc/config/wireless" ] || exit 0
+
+UCI_CMD="uci"
+if [ -n "$SYS_PREFIX" ]; then
+	UCI_CMD="uci -c $SYS_PREFIX/etc/config"
+fi
+# 配置三频物理射频设备 (radio0/1/2): 启用并设置国家码 CN
+dev_idx=0
+while $UCI_CMD -q get wireless.@wifi-device[$dev_idx] >/dev/null; do
+	$UCI_CMD -q set wireless.@wifi-device[$dev_idx].disabled='0'
+	$UCI_CMD -q set wireless.@wifi-device[$dev_idx].country='CN'
+	dev_idx=$((dev_idx + 1))
+done
+
+# 配置三频无线 AP 接口 (radio0/1/2): SSID、WPA2-PSK 加密与密码
+iface_idx=0
+while $UCI_CMD -q get wireless.@wifi-iface[$iface_idx] >/dev/null; do
+	$UCI_CMD -q set wireless.@wifi-iface[$iface_idx].ssid="$SSID"
+	$UCI_CMD -q set wireless.@wifi-iface[$iface_idx].encryption='psk2'
+	$UCI_CMD -q set wireless.@wifi-iface[$iface_idx].key="$KEY"
+	iface_idx=$((iface_idx + 1))
+done
+
+# 兼容命名接口段配置 (default_radio0/1/2)
+for r in 0 1 2; do
+	if $UCI_CMD -q get wireless.radio${r} >/dev/null; then
+		$UCI_CMD -q set wireless.radio${r}.disabled='0'
+		$UCI_CMD -q set wireless.radio${r}.country='CN'
+	fi
+	if $UCI_CMD -q get wireless.default_radio${r} >/dev/null; then
+		$UCI_CMD -q set wireless.default_radio${r}.ssid="$SSID"
+		$UCI_CMD -q set wireless.default_radio${r}.encryption='psk2'
+		$UCI_CMD -q set wireless.default_radio${r}.key="$KEY"
+	fi
+done
+
+$UCI_CMD commit wireless
+exit 0
+EOF_WIFI_BODY
+
+chmod +x "$DEFAULT_WIFI_SCRIPT"
+
+# =========================================================
+# 闪存寿命与存储保护：合规初始化每周 fstrim 定时调度 (防止高频 Docker 磨损 eMMC)
+# 架构归位说明：
+# 1. 彻底移除开机常驻自启软链接 (/etc/rc.d/S99fstrim)，杜绝每次开机强行复活用户已删除的任务与杀进程重启 cron
+# 2. 将出厂定时任务初始化归位至标准 uci-defaults 脚本 (98-default-fstrim)
+#    - 构建期 (IPKG_INSTROOT)：退出 1 阻断构建阶段提前删除，随 rootfs 下发
+#    - 运行期保留配置升级：检测到既有 /etc/crontabs/root 时严格静默退出 0，不破坏用户既有配置与 cron 状态
+#    - 运行期全新安装/恢复出厂：仅在无既有配置时写入默认每周 trim 任务并启动 cron，执行后由系统自动销毁 (rm -f)
+# 3. 提供纯净的手动执行脚本 (/etc/init.d/fstrim)，仅负责触发文件系统 trim，绝不越权篡改 crontab 或重启 cron
+# =========================================================
+INIT_DIR="./package/base-files/files/etc/init.d"
+RCD_DIR="./package/base-files/files/etc/rc.d"
+mkdir -p "$INIT_DIR" "$RCD_DIR"
+
+FSTRIM_INIT="$INIT_DIR/fstrim"
+cat << 'EOF_FSTRIM' > "$FSTRIM_INIT"
+#!/bin/sh /etc/rc.common
+# Weekly fstrim manual service for Athena AX6600 eMMC flash wear leveling
+
+START=99
+
+start() {
+	TRIM_CMD="/sbin/fstrim"
+	if [ -x "/sbin/fstrim" ]; then
+		TRIM_CMD="/sbin/fstrim"
+	elif [ -x "/usr/sbin/fstrim" ]; then
+		TRIM_CMD="/usr/sbin/fstrim"
+	else
+		TRIM_CMD="fstrim"
+	fi
+	$TRIM_CMD -av 2>&1 | logger -t fstrim
+}
+EOF_FSTRIM
+chmod +x "$FSTRIM_INIT"
+
+# 严格确保开机常驻自启软链接 (S99fstrim) 不存在，绝不在构建期或开机时常驻自启
+rm -f "$RCD_DIR/S99fstrim"
+
+DEFAULT_FSTRIM_SCRIPT="$WIFI_DEFAULTS_DIR/98-default-fstrim"
+cat << 'EOF_FSTRIM_UCI' > "$DEFAULT_FSTRIM_SCRIPT"
+#!/bin/sh
+# 98-default-fstrim: Athena AX6600 (JDCloud RE-CS-02) Default fstrim Cron Initialization
+
+SYS_PREFIX="${IPKG_INSTROOT:-${SIM_ROOT:-}}"
+
+# 1. 在 rootfs 构建期 (IPKG_INSTROOT)：
+# 必须退出非 0 状态以阻断 rootfs 构建阶段提前删除 (rm -f) 本初始化脚本，确保随 rootfs 下发并在目标机首次开机时执行。
+if [ -n "$IPKG_INSTROOT" ]; then
+	exit 1
+fi
+
+CRON_DIR="$SYS_PREFIX/etc/crontabs"
+CRON_FILE="$CRON_DIR/root"
+
+# 2. 检查是否为保留配置升级 (sysupgrade) 或系统已存在既有定时任务配置：
+# 若检测到 /etc/crontabs/root 已存在（保留配置升级场景，包括用户已自定义修改或主动删除 trim 任务，含符号链接）：
+# 严格保持静默，直接退出 0，绝不篡改用户既有定时任务，绝不触发多余的 cron 杀进程重启！
+# 退出 0 后由 OpenWrt 官方 uci-defaults 机制将其自动销毁 (rm -f)，后续绝不反复运行。
+if [ -e "$CRON_FILE" ] || [ -L "$CRON_FILE" ]; then
+	exit 0
+fi
+
+# 3. 仅在全新刷机 / 恢复出厂设置（无既有 /etc/crontabs/root）时，创建默认每周 trim 任务并启动 cron
+mkdir -p "$CRON_DIR"
+
+if [ -n "$SYS_PREFIX" ]; then
+	if [ -x "$SYS_PREFIX/sbin/fstrim" ]; then
+		TRIM_CMD="/sbin/fstrim"
+	elif [ -x "$SYS_PREFIX/usr/sbin/fstrim" ]; then
+		TRIM_CMD="/usr/sbin/fstrim"
+	else
+		TRIM_CMD="fstrim"
+	fi
+else
+	if [ -x "/sbin/fstrim" ]; then
+		TRIM_CMD="/sbin/fstrim"
+	elif [ -x "/usr/sbin/fstrim" ]; then
+		TRIM_CMD="/usr/sbin/fstrim"
+	else
+		TRIM_CMD="fstrim"
+	fi
+fi
+
+cat << EOF > "$CRON_FILE"
+0 4 * * 0 ($TRIM_CMD -av 2>&1 | logger -t fstrim)
+EOF
+chmod 600 "$CRON_FILE" 2>/dev/null || true
+
+CRON_INIT="/etc/init.d/cron"
+if [ -n "$SYS_PREFIX" ]; then
+	CRON_INIT="$SYS_PREFIX/etc/init.d/cron"
+fi
+if [ -x "$CRON_INIT" ]; then
+	"$CRON_INIT" enable 2>/dev/null || true
+	"$CRON_INIT" restart 2>/dev/null || true
+fi
+
+exit 0
+EOF_FSTRIM_UCI
+chmod +x "$DEFAULT_FSTRIM_SCRIPT"
+
+# =========================================================
+# 系统升级与资产保护：预置 keep.d 白名单，防止保留配置升级时静默丢失应用级非 UCI 用户资产
+# 覆盖关键资产：/etc/docker/daemon.json, /etc/adguardhome.yaml, /root/.ssh/
+# =========================================================
+KEEP_DIR="./package/base-files/files/lib/upgrade/keep.d"
+mkdir -p "$KEEP_DIR"
+
+CUSTOM_KEEP_FILE="$KEEP_DIR/99-ax6600-custom"
+cat << 'EOF_KEEP' > "$CUSTOM_KEEP_FILE"
+/etc/docker/daemon.json
+/etc/adguardhome.yaml
+/root/.ssh/
+EOF_KEEP
+chmod 644 "$CUSTOM_KEEP_FILE"
 
 CFG_FILE="./package/base-files/files/bin/config_generate"
 if [ -f "$CFG_FILE" ]; then

@@ -1,4 +1,4 @@
- #CI项目
+#CI项目
 name: WRT-TEST
 
 #CI计划
@@ -29,8 +29,8 @@ on:
         required: false
         type: string
       PROFILE:
-        description: '固件版本：PURE=纯净版，PLUS=Plus 版。'
-        default: 'PURE'
+        description: '验证用的配置档；发布流程仅使用 PLUS，PURE 仅用于配置对比。'
+        default: 'PLUS'
         required: true
         type: choice
         options:

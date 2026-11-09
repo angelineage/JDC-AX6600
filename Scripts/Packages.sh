@@ -64,7 +64,10 @@ UPDATE_PACKAGE() {
 if [[ "${WRT_PROFILE^^}" == "PLUS" ]]; then
 	# LuCI 入口随 "pkg" 通配一并提取，依赖包（xray、sing-box、geodata 等）
 	# 由 passwall_packages feed 提供，避免同名包双重定义。
-	UPDATE_PACKAGE "openclash" "vernesong/OpenClash" "master" "pkg"
+	# OpenClash 未在 .config 中启用，其脚本依赖 ruby 也已从 Config 移除，故不再克隆源码。
+	# fork 者如需启用：取消下面这行注释，并同步放开 Config/GENERAL_AX6600_PLUS.txt
+	# 的 OpenClash 段（含 dnsmasq-full）与 ruby / ruby-yaml 两行。
+	#UPDATE_PACKAGE "openclash" "vernesong/OpenClash" "master" "pkg"
 	#一代 PassWall 已由 PassWall2 取代，fork 者如需可取消注释，并同步启用 Config/GENERAL_AX6600_PLUS.txt 中对应配置段
 	#UPDATE_PACKAGE "passwall" "Openwrt-Passwall/openwrt-passwall" "main" "pkg"
 	UPDATE_PACKAGE "passwall2" "Openwrt-Passwall/openwrt-passwall2" "main" "pkg"

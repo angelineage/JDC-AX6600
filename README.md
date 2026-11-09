@@ -66,7 +66,7 @@ angelineage-athena-26.11.08-10.30.00
 | Release tag / 标题 | `angelineage-athena-26.11.08-10.30.00` | 与产物前缀完全一致，便于按时间排序回溯 |
 | 固件本体 | `<WRT_TAG>-ipq60xx-jdcloud_re-cs-02-squashfs-<factory\|sysupgrade>.bin` | `factory` 从原厂固件首次刷入；`sysupgrade` 在 OpenWrt/ImmortalWrt 内升级 |
 | 配置快照 | `Config-<WRT_TAG>.txt` | 本次编译完整 `.config`，便于复现或二次定制 |
-| 插件来源 | `Packages-<WRT_TAG>.txt` | 构建时拉取的插件源码仓库、分支与 commit（含未启用项，不代表集成清单） |
+| 插件来源 | `Packages-<WRT_TAG>.txt` | 构建时克隆的插件源码仓库、分支与 commit（仅源码记录，不代表集成清单） |
 | manifest | `<WRT_TAG>-...manifest` | 编译产出的包清单 |
 | 校验文件 | `sha256sums.txt` | 刷机前请务必校验，方法见[刷机前必读](#刷机前必读) |
 
@@ -230,7 +230,8 @@ done
 
 当前 PLUS 版**实际随固件集成**的 LuCI 组件，以 Release 正文「内置组件」清单（由 manifest 生成）为准，主要包括：PassWall2、partexp（分区扩容）、wolultra（网络唤醒）、ttyd、UPnP、WireGuard、cloudflared、aria2、Samba4、athena-led、argon 主题，以及通用配置里的 firewall4 / FullCone NAT / autoreboot / arpbind 等。
 
-- **未集成的可选插件**：`Config/GENERAL_AX6600_PLUS.txt` 中 OpenClash、Docker/Dockerman、AdGuard Home、DDNS 等配置段均为**注释状态**，固件内不含这些插件；`Scripts/Packages.sh` 仍会克隆部分源码，因此 `Packages-*.txt` 里可能出现它们的名字，不代表已集成。
+- **未集成的可选插件**：`Config/GENERAL_AX6600_PLUS.txt` 中 OpenClash、Docker/Dockerman、AdGuard Home、DDNS 等配置段均为**注释状态**，固件内不含这些插件；`Scripts/Packages.sh` 已不再克隆 OpenClash 源码，`Packages-*.txt` 记录的是本次构建实际克隆的源码（PassWall2 / partexp / viking），仅为源码记录而非集成清单。
+- **精简依赖（2026-11-09）**：已移除 OpenClash 遗留的 ruby 全家，以及 Iptables 透明代理遗留的 ipset / iptables-mod-* / kmod-ipt-*；本固件使用 firewall4 + Nftables 透明代理，这些包没有调用方。若日后重新启用 OpenClash 或 Iptables 透明代理，需把对应项一并加回。
 - **需要这些插件时**：LuCI 应用类可自行安装或取消注释后重新编译；涉及内核模块（如 Docker 的 `kmod-*`）必须随固件编译，滚动内核下无法事后 `opkg` 补装。
 - **PassWall2 使用**：已启用 xray / sing-box 双核心与 Nftables 透明代理（自动带 chinadns-ng），首次配置请先确认 DNS 转发链，避免与其它 DNS 工具抢占 53 端口。
 - **partexp 与存储**：需要挂载空闲 eMMC 分区时先用 partexp 扩容；`sysupgrade` 保留配置不等于保留整个 overlay，重要数据请先导出。

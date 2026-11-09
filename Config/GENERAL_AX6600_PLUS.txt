@@ -61,13 +61,14 @@ CONFIG_PACKAGE_geoview=y
 #CONFIG_PACKAGE_dnsmasq_full_nftset=y
 #CONFIG_PACKAGE_dnsmasq_full_ipset=n
 
-CONFIG_PACKAGE_ipset=y
+# 仅保留 Nftables / Xray 链路所需工具。以下冗余项已于 2026-11-09 移除：
+#   ruby / ruby-yaml —— OpenClash 的脚本依赖，而 OpenClash 未集成；
+#   ipset / kmod-ipt-nat / iptables-mod-tproxy / iptables-mod-extra
+#     —— 为 Iptables 透明代理准备，本配置使用 Nftables 透明代理，
+#        且 iptables 主程序本身未入选，这些内核模块与 xtables 库无用户态调用方。
+# 若要重新启用 OpenClash 或 Iptables 透明代理，请把对应项加回，
+# 并同步放开 Scripts/Packages.sh 里的 OpenClash 克隆行。
 CONFIG_PACKAGE_ip-full=y
-CONFIG_PACKAGE_ruby=y
-CONFIG_PACKAGE_ruby-yaml=y
-CONFIG_PACKAGE_kmod-ipt-nat=y
-CONFIG_PACKAGE_iptables-mod-tproxy=y
-CONFIG_PACKAGE_iptables-mod-extra=y
 CONFIG_PACKAGE_kmod-inet-diag=y
 CONFIG_PACKAGE_kmod-nft-tproxy=y
 CONFIG_PACKAGE_kmod-nft-queue=y

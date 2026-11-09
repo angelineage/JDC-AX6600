@@ -110,11 +110,12 @@ jobs:
             *) echo "Unsupported WRT_PROFILE: $WRT_PROFILE" >&2; exit 1 ;;
           esac
           echo "WRT_PROFILE=$WRT_PROFILE_UPPER" >> $GITHUB_ENV
-          # 统一产物命名：<CONFIG>-<PROFILE>-angelineage-athena-<编译日期>-<编译时间>
+          # 统一产物命名：angelineage-athena-<编译日期>-<编译时间>
           # WRT_DATE 形如 26.11.08-10.30.00（TZ=UTC-8 的编译开始时间）
-          echo "WRT_TAG=${WRT_CONFIG}-${WRT_PROFILE_UPPER}-angelineage-athena-${WRT_DATE}" >> $GITHUB_ENV
+          # 只发布 PLUS 单版本、只用一份平台配置，故配置名与版本档不再重复写入产物名
+          echo "WRT_TAG=angelineage-athena-${WRT_DATE}" >> $GITHUB_ENV
           if [[ "$WRT_PROFILE_UPPER" == "PLUS" ]]; then
-            echo "WRT_PROFILE_DESC=Plus 版，预装 OpenClash、PassWall2、Docker/Dockerman、AdGuard Home、DDNS、ttyd、UPnP 及分区扩容、网络唤醒等实用插件，刷完即用；启用 AdGuard Home 与代理插件前请先阅读 README 的「PLUS 版使用提示」" >> $GITHUB_ENV
+            echo "WRT_PROFILE_DESC=Plus 版（本仓库唯一发布版本），随固件集成 PassWall2（xray/sing-box 双核心）、分区扩容 partexp、网络唤醒 wolultra、ttyd、UPnP、WireGuard、cloudflared、aria2、Samba4、雅典娜 LED 屏控制等；OpenClash、Docker/Dockerman、AdGuard Home、DDNS 在 Config/GENERAL_AX6600_PLUS.txt 中留作可选但为注释状态，固件内不含这些插件。实际内置组件以本 Release 文末清单为准" >> $GITHUB_ENV
           else
             echo "WRT_PROFILE_DESC=纯净版，轻量稳定，仅含基础网络与常用管理插件，扩展插件按需自行安装" >> $GITHUB_ENV
           fi
@@ -310,6 +311,8 @@ jobs:
           # 5. PLUS 核心插件入选断言 (当 WRT_PROFILE 为 PLUS 时)
           if [[ "${WRT_PROFILE_UPPER:-${WRT_PROFILE}}" == "PLUS" ]]; then
             echo "--- 检查 PLUS 核心插件意图一致性 ---"
+            # 此列表用于「声明启用则必须入选」的意图校验；配置中未启用的条目会跳过（SKIP），
+            # 不代表这些插件已随固件集成，实际内置组件以 manifest 生成的 WRT_LIST 为准。
             for PKG in luci-app-passwall2 luci-app-openclash luci-app-dockerman luci-app-adguardhome luci-app-wolultra; do
               PKG_INTENT="CONFIG_PACKAGE_${PKG}=y"
               if [[ -f .config.seed ]]; then
@@ -476,59 +479,64 @@ jobs:
           tag_name: ${{ env.WRT_TAG }}
           files: ./wrt/upload/*.*
           body: |
-            📦 AX6600 / IPQ60xx 定制固件（仅 PLUS 版，手动编译）
+            📦 京东云无线宝雅典娜 AX6600 定制固件（仅 PLUS 单版本，手动云编译）
             ━━━━━━━━━━━━━━━━━━━━━━━
 
             📌 基本信息
-            <!-- 源码仓库：${{ env.WRT_REPO }} -->
-            <!-- 编译分支：${{ env.WRT_BRANCH }} -->
+            源码仓库：${{ env.WRT_REPO }}
+            编译分支：${{ env.WRT_BRANCH }}
+            源码提交：${{ env.WRT_HASH }}
+            编译时间：${{ env.WRT_DATE }}（北京时间）
             固件版本：${{ env.WRT_PROFILE }}
             版本说明：${{ env.WRT_PROFILE_DESC }}
-            提交版本：${{ env.WRT_HASH }}
-            编译时间：${{ env.WRT_DATE }}
             ━━━━━━━━━━━━━━━━━━━━━━━
 
             📌 外部插件来源
+            以下记录构建时拉取的插件源码仓库、分支与 commit，便于复现：
             ${{ env.WRT_PKG_INFO }}
+
+            注意：这里列的是「拉取过的源码」，部分条目（如 OpenClash）仅克隆、未在 .config 中启用，
+            不代表已随固件集成。实际内置组件以本页文末「内置组件」清单为准。
             ━━━━━━━━━━━━━━━━━━━━━━━
 
             🧩 设备与平台
             设备型号：JDCloud RE-CS-02（京东云无线宝雅典娜 AX6600）
-            硬件平台：${{ env.WRT_TARGET }}
-            CPU架构：Qualcomm IPQ6010 / IPQ60xx
+            硬件平台：${{ env.WRT_TARGET }} / ipq60xx
+            CPU 架构：Qualcomm IPQ6010 / IPQ60xx
             ━━━━━━━━━━━━━━━━━━━━━━━
 
             ⚙️ 固件特性
             - Qualcomm PPE 开源硬件加速 + Linux 原生 Flowtable 硬件卸载
-            - SONiC FullCone NAT1 游戏穿透支持
-            - 基于 Linux 6.18 LTS 内核 / firewall4 架构
-            - 常用 LuCI 插件预集成
-            - GitHub Actions 手动触发云编译，宿主工具穿透与缓存优化
-            - 支持自定义配置构建
+            - SONiC FullCone NAT1（集成于 firewall4）
+            - 基于 Linux 6.18 LTS 内核 / firewall4 架构，随上游 owrt 分支更新
+            - PLUS 插件随固件集成，清单见文末「内置组件」
+            - GitHub Actions 手动触发云编译，缓存与宿主工具链优化
+            - 编译期注入默认 fstab，消除 preinit 阶段的 fstab 告警
             ━━━━━━━━━━━━━━━━━━━━━━━
 
             🔐 默认登录信息
             管理地址：${{ env.WRT_IP }}
             管理密码：${{ env.WRT_PW }}
-
             WiFi 名称：${{ env.WRT_SSID }}
             WiFi 密码：${{ env.WRT_WORD }}
+            主机名：${{ env.WRT_NAME }}
             ━━━━━━━━━━━━━━━━━━━━━━━
 
-            📶 WiFi 当前构建默认
-            - 2.4G（phy1）：信道 11，HE20，20 dBm
-            - 5G（phy0）：信道 149，HE80，22 dBm
-            - 第三射频（QCN9074 / HE160 / AirPort）默认禁用，需自行在 /etc/config/wireless 启用
-            - 通用：地区 US，加密 sae-mixed（WPA3/WPA2 混合），CCMP
+            📶 无线默认配置
+            - 全新刷机 / 恢复出厂：由 uci-defaults 生成默认 SSID、WPA2-PSK（psk2）、地区 CN，三个射频均设为启用
+            - 信道、带宽与发射功率沿用上游 wifi config 探测结果，编译期未写死
+            - 保留配置升级：完全沿用设备既有 /etc/config/wireless，不会被编译期默认值覆盖
+            - 第三射频（QCN9074）能否使用取决于硬件与固件；启动日志中 firmware-2.bin 为可选固件探测，缺失属预期
             ━━━━━━━━━━━━━━━━━━━━━━━
+
             📥 下载与刷机说明
             - 本项目仅发布 PLUS 单版本固件，不再构建 PURE 版
             - 首次从原厂固件刷入：选文件名带 factory 的文件
             - 已是 OpenWrt/ImmortalWrt 升级：选文件名带 sysupgrade 的文件
             - 刷机 / 救砖完整教程：[刷机救砖教程](${{ github.server_url }}/${{ github.repository }}/blob/main/Docs/刷机救砖教程.md)
-            - Config-*.txt：本次编译的完整 .config 配置，便于复现或二次定制
-            - Packages-*.txt：外部插件（OpenClash / PassWall2 等）的仓库、分支与 commit 记录
-            - sha256sums.txt：固件校验文件，刷机前请先校验下载完整性（方法见 README 刷机前必读）
+            - Config-*.txt：本次编译的完整 .config，便于复现或二次定制
+            - Packages-*.txt：构建时拉取的插件源码与 commit（含未启用项，不代表集成清单）
+            - sha256sums.txt：固件校验文件，刷机前请先校验下载完整性
 
             ⚠️ 风险提示
             刷机存在风险，请确认：
@@ -537,8 +545,9 @@ jobs:
             - 了解分区结构
             ━━━━━━━━━━━━━━━━━━━━━━━
 
-            💡 插件信息
-            内置组件：
+            💡 内置组件
+            以下清单由本次固件 manifest 生成，是实际随固件安装的 LuCI 组件；
+            OpenClash、Docker/Dockerman、AdGuard Home、DDNS 不在其中。
             ${{ env.WRT_LIST }}
 
             内核版本：

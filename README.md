@@ -18,7 +18,7 @@
 | 构建源码 | [ones20250/immortalwrt_ipq](https://github.com/ones20250/immortalwrt_ipq) 的 `owrt` 分支 |
 | 发布版本 | **仅 PLUS 一个版本**，不再同时构建 PURE |
 | 触发方式 | **仅手动**：Actions → `QCA-ALL` → Run workflow；无定时、无 push/workflow_run 自动触发 |
-| 产物命名 | `IPQ60XX-WIFI-YES-PLUS-angelineage-athena-<编译日期>-<编译时间>` 统一前缀 |
+| 产物命名 | `angelineage-athena-<编译日期>-<编译时间>` 统一前缀 |
 | 默认管理地址 | `192.168.10.1`，主机名 `OWRT`，SSID `OWRT` |
 | 加速架构 | PPE（Linux Flowtable 硬件卸载）+ NSS Wi-Fi 驱动 + firewall4 SONiC FullCone NAT1 |
 
@@ -26,7 +26,7 @@
 
 - **只发 PLUS**：`QCA-ALL.yml` 的 matrix 固定为 `PROFILE: [PLUS]`。历史 Release 中仍有 PURE 版，属旧构建，不再更新。
 - **不再自动编译**：`Auto-Clean` / `Cache-Clean` 的 `schedule` 已注释，`QCA-ALL` 移除了 `workflow_run`。清理旧 Release 不会连带触发编译；提交代码也不会触发编译。
-- **统一产物命名**：Release tag、固件本体、`Config-*.txt`、`Packages-*.txt` 全部使用同一个 `WRT_TAG` 前缀，详见[固件命名](#固件命名与附件说明)。
+- **统一产物命名**：Release tag、固件本体、`Config-*.txt`、`Packages-*.txt` 全部使用同一个 `WRT_TAG` 前缀；2026-11-09 起进一步精简为 `angelineage-athena-<编译日期>-<编译时间>`，配置名与版本档不再进入产物名，详见[固件命名](#固件命名与附件说明)。
 - **编译期注入默认 fstab**：新增 `Files/etc/config/fstab`，用于消除启动阶段的 `block: fstab: Entry not found` 告警，详见[已知启动日志](#已知启动日志与处理)。
 
 ---
@@ -45,29 +45,28 @@
 
 ## 固件命名与附件说明
 
-自 2026-11 起，所有产物统一由 `WRT_TAG` 生成：
+自 2026-11-09 起，所有产物统一由一个精简的 `WRT_TAG` 生成：
 
 ```
-WRT_TAG = <WRT_CONFIG>-<WRT_PROFILE>-angelineage-athena-<编译日期>-<编译时间>
+WRT_TAG = angelineage-athena-<编译日期>-<编译时间>
 ```
 
-- `WRT_CONFIG`：固定 `IPQ60XX-WIFI-YES`
-- `WRT_PROFILE`：固定 `PLUS`
-- `angelineage-athena`：仓库标识 + 板型标识（取代旧的 `ones20250-owrt` 源码名/分支名）
+- `angelineage-athena`：仓库标识 + 板型标识
 - `编译日期-编译时间`：`WRT_DATE`，格式 `YY.MM.DD-HH.MM.SS`（`TZ=UTC-8`，即北京时间），取**编译开始**时间，用于对应上游源码提交
+- 本仓库只发布 `PLUS` 单版本、只用一份 `IPQ60XX-WIFI-YES` 平台配置，这两个固定值不再重复写进文件名；Release 正文中仍会标明版本与配置
 
 示例（假设 2026-11-08 10:30:00 开始编译）：
 
 ```
-IPQ60XX-WIFI-YES-PLUS-angelineage-athena-26.11.08-10.30.00
+angelineage-athena-26.11.08-10.30.00
 ```
 
 | 文件 | 命名形式 | 说明 |
 |---|---|---|
-| Release tag / 标题 | `IPQ60XX-WIFI-YES-PLUS-angelineage-athena-26.11.08-10.30.00` | 与产物前缀完全一致，便于按时间排序回溯 |
+| Release tag / 标题 | `angelineage-athena-26.11.08-10.30.00` | 与产物前缀完全一致，便于按时间排序回溯 |
 | 固件本体 | `<WRT_TAG>-ipq60xx-jdcloud_re-cs-02-squashfs-<factory\|sysupgrade>.bin` | `factory` 从原厂固件首次刷入；`sysupgrade` 在 OpenWrt/ImmortalWrt 内升级 |
 | 配置快照 | `Config-<WRT_TAG>.txt` | 本次编译完整 `.config`，便于复现或二次定制 |
-| 插件来源 | `Packages-<WRT_TAG>.txt` | 外部插件（PassWall / OpenClash 等）的仓库、分支与 commit |
+| 插件来源 | `Packages-<WRT_TAG>.txt` | 构建时拉取的插件源码仓库、分支与 commit（含未启用项，不代表集成清单） |
 | manifest | `<WRT_TAG>-...manifest` | 编译产出的包清单 |
 | 校验文件 | `sha256sums.txt` | 刷机前请务必校验，方法见[刷机前必读](#刷机前必读) |
 
@@ -221,15 +220,20 @@ done
 
 通用项：地区 `US`、加密 `sae-mixed`（WPA3/WPA2 混合，CCMP）、2.4G/5G 同名 SSID `Air`。
 
+> 说明：上表为设备侧常见实测配置。**编译期默认值**由 `Scripts/Settings.sh` 的 uci-defaults 注入（默认 SSID `OWRT`、WPA2-PSK、地区 CN，射频默认启用），仅在全新刷机 / 恢复出厂时生效；保留配置升级会完整沿用既有 `/etc/config/wireless`，不会被覆盖。信道、带宽与功率沿用上游 `wifi config` 探测结果，编译期未写死。
+
 > 实测提示：5GHz HE80 单客户端 TCP 吞吐约 400–500 Mbps 属正常区间，主要受信号强度与 MCS 波动影响；`radio0` 硬件不支持 160MHz（`neither 160 nor 80+80`），不要按 160MHz 预期调参。
 
 ---
 
 ## PLUS 版使用提示
 
-- **AdGuard Home 首次启用**：默认关闭。启用后访问 `http://路由器IP:3000` 走安装向导，DNS 监听端口填 `5553`（`53` 已被 dnsmasq 占用）；完成后在 LuCI「网络 → DHCP/DNS」的「DNS 转发」填 `127.0.0.1#5553` 并勾选「忽略解析文件」。
-- **代理插件二选一**：OpenClash 与 PassWall2 都接管 DNS + 透明代理，同时启用会互相抢占，轻则分流错乱、重则断网。只启用一个，切换前先停用当前插件。
-- **Docker 存储去向**：默认写入系统分区容易撑爆。建议先用「分区扩容（partexp）」把空闲 eMMC 挂为独立分区，再把 Docker 数据根指向该分区。
+当前 PLUS 版**实际随固件集成**的 LuCI 组件，以 Release 正文「内置组件」清单（由 manifest 生成）为准，主要包括：PassWall2、partexp（分区扩容）、wolultra（网络唤醒）、ttyd、UPnP、WireGuard、cloudflared、aria2、Samba4、athena-led、argon 主题，以及通用配置里的 firewall4 / FullCone NAT / autoreboot / arpbind 等。
+
+- **未集成的可选插件**：`Config/GENERAL_AX6600_PLUS.txt` 中 OpenClash、Docker/Dockerman、AdGuard Home、DDNS 等配置段均为**注释状态**，固件内不含这些插件；`Scripts/Packages.sh` 仍会克隆部分源码，因此 `Packages-*.txt` 里可能出现它们的名字，不代表已集成。
+- **需要这些插件时**：LuCI 应用类可自行安装或取消注释后重新编译；涉及内核模块（如 Docker 的 `kmod-*`）必须随固件编译，滚动内核下无法事后 `opkg` 补装。
+- **PassWall2 使用**：已启用 xray / sing-box 双核心与 Nftables 透明代理（自动带 chinadns-ng），首次配置请先确认 DNS 转发链，避免与其它 DNS 工具抢占 53 端口。
+- **partexp 与存储**：需要挂载空闲 eMMC 分区时先用 partexp 扩容；`sysupgrade` 保留配置不等于保留整个 overlay，重要数据请先导出。
 - **依赖外部插件仓库**：上游调整包名或依赖时，可能需要同步更新 `Config/GENERAL_AX6600_PLUS.txt`。
 
 ---
@@ -269,7 +273,7 @@ cat /sys/kernel/debug/39000000.nss/flows
 | OpenWrt / 内核 | 不支持 | ✅ ImmortalWrt / Linux 6.18 LTS / firewall4 |
 | 硬件加速 | 原厂闭源 NSS 架构 | ✅ PPE + Flowtable 硬件卸载，NSS Wi-Fi 加速受支持的无线路径 |
 | NAT 模式 | 普通锥形 NAT | ✅ SONiC FullCone NAT1（集成于 firewall4） |
-| 自定义插件 | ❌ | ✅ Docker / PassWall2 / OpenClash 开箱即用 |
+| 自定义插件 | ❌ | ✅ PassWall2 / partexp / wolultra / ttyd / UPnP / WireGuard / cloudflared / aria2 / Samba4 等随固件集成（完整清单见 Release） |
 | 构建方式 | — | ✅ GitHub Actions **手动触发**云编译，宿主工具穿透与缓存优化 |
 | 上游跟进 | — | ✅ 每次编译时拉取 `owrt` 分支最新提交（非每日自动构建） |
 | 开源透明 | ❌ 闭源 | ✅ 构建脚本与主机侧驱动可审查；NSS Wi-Fi 仍依赖闭源固件 |

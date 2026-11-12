@@ -1,0 +1,24 @@
+#!/bin/sh
+# 由仓库 Files/ 在编译期注入 rootfs 的首次启动配置脚本。
+#
+# 目的：统一 collectd 的 RRD 写入路径与 LuCI 统计页面的读取路径。
+# LuCI 前端 statistics/rrdtool.js 取
+#   uci get luci_statistics.collectd_rrdtool.DataDir || '/tmp/rrd'
+# 而 collectd 未配置 DataDir 时会按内置默认写到
+#   /tmp/lib/collectd/<hostname>/
+# 两者不一致时页面会一直提示「未找到 RRD 数据」。
+# 另外 init.d/luci_statistics 的 doing_backups() 要求 DataDir 非空，
+# 设了它 backup=1 的重启 / 升级数据保留才会真正生效。
+#
+# 只改这一项：采集插件的启用状态沿用 luci-app-statistics 自带默认配置
+# （cpu / interface / iwinfo / load / memory / rrdtool 默认 enable=1），
+# 不覆盖用户日后在 LuCI「统计 → 设置」里的自定义。
+# 脚本执行后由 /etc/init.d/boot 自动删除；写入的值保存在
+# /etc/config/luci_statistics，该文件作为 conffile 会被 sysupgrade 保留。
+
+[ -f /etc/config/luci_statistics ] || exit 0
+
+uci -q set luci_statistics.collectd_rrdtool.DataDir='/tmp/rrd'
+uci -q commit luci_statistics
+
+exit 0

@@ -228,9 +228,9 @@ done
 
 ## PLUS 版使用提示
 
-当前 PLUS 版**实际随固件集成**的 LuCI 组件，以 Release 正文「内置组件」清单（由 manifest 生成）为准，主要包括：PassWall2、partexp（分区扩容）、wolultra（网络唤醒）、ttyd、UPnP、WireGuard、cloudflared、aria2、Samba4、athena-led、argon 主题、统计图表（collectd / RRD），以及通用配置里的 firewall4 / FullCone NAT / autoreboot / arpbind 等。
+当前 PLUS 版**实际随固件集成**的 LuCI 组件，以 Release 正文「内置组件」清单（由 manifest 生成）为准，主要包括：PassWall2、OpenAppFilter（OAF，DPI 应用识别/上网管控）、nlbwmon（按设备流量统计）、partexp（分区扩容）、wolultra（网络唤醒）、ttyd、UPnP、WireGuard、cloudflared、aria2、Samba4、athena-led、argon 主题，以及通用配置里的 firewall4 / FullCone NAT / autoreboot / arpbind 等。统计图表（collectd / RRD）已于 2026-11-21 移除，由 nlbwmon 承担流量统计。
 
-- **未集成的可选插件**：`Config/GENERAL_AX6600_PLUS.txt` 中 OpenClash、Docker/Dockerman、AdGuard Home、DDNS 等配置段均为**注释状态**，固件内不含这些插件；`Scripts/Packages.sh` 已不再克隆 OpenClash 源码，`Packages-*.txt` 记录的是本次构建实际克隆的源码（PassWall2 / partexp / viking），仅为源码记录而非集成清单。
+- **未集成的可选插件**：`Config/GENERAL_AX6600_PLUS.txt` 中 OpenClash、Docker/Dockerman、AdGuard Home、DDNS 等配置段均为**注释状态**，固件内不含这些插件；`Scripts/Packages.sh` 已不再克隆 OpenClash 源码，`Packages-*.txt` 记录的是本次构建实际克隆的源码（PassWall2 / OpenAppFilter / partexp / viking），仅为源码记录而非集成清单。
 - **精简依赖（2026-11-09）**：已移除 OpenClash 遗留的 ruby 全家，以及 Iptables 透明代理遗留的 ipset / iptables-mod-* / kmod-ipt-*；本固件使用 firewall4 + Nftables 透明代理，这些包没有调用方。若日后重新启用 OpenClash 或 Iptables 透明代理，需把对应项一并加回。
 - **需要这些插件时**：LuCI 应用类可自行安装或取消注释后重新编译；涉及内核模块（如 Docker 的 `kmod-*`）必须随固件编译，滚动内核下无法事后 `opkg` 补装。
 - **PassWall2 使用**：已启用 xray / sing-box 双核心与 Nftables 透明代理（自动带 chinadns-ng），首次配置请先确认 DNS 转发链，避免与其它 DNS 工具抢占 53 端口。

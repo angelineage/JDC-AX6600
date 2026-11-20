@@ -115,7 +115,7 @@ jobs:
           # 只发布 PLUS 单版本、只用一份平台配置，故配置名与版本档不再重复写入产物名
           echo "WRT_TAG=angelineage-athena-${WRT_DATE}" >> $GITHUB_ENV
           if [[ "$WRT_PROFILE_UPPER" == "PLUS" ]]; then
-            echo "WRT_PROFILE_DESC=Plus 版（本仓库唯一发布版本），随固件集成 PassWall2（xray/sing-box 双核心）、分区扩容 partexp、网络唤醒 wolultra、ttyd、UPnP、WireGuard、cloudflared、aria2、Samba4、雅典娜 LED 屏控制等；OpenClash、Docker/Dockerman、AdGuard Home、DDNS 在 Config/GENERAL_AX6600_PLUS.txt 中留作可选但为注释状态，固件内不含这些插件。实际内置组件以本 Release 文末清单为准" >> $GITHUB_ENV
+            echo "WRT_PROFILE_DESC=Plus 版（本仓库唯一发布版本），随固件集成 PassWall2（xray/sing-box 双核心）、OpenAppFilter（DPI 应用识别/上网管控）、nlbwmon（按设备流量统计）、分区扩容 partexp、网络唤醒 wolultra、ttyd、UPnP、WireGuard、cloudflared、aria2、Samba4、雅典娜 LED 屏控制等；统计图表（collectd/RRD）已于 2026-11-21 移除；OpenClash、Docker/Dockerman、AdGuard Home、DDNS 在 Config/GENERAL_AX6600_PLUS.txt 中留作可选但为注释状态，固件内不含这些插件。实际内置组件以本 Release 文末清单为准" >> $GITHUB_ENV
           else
             echo "WRT_PROFILE_DESC=纯净版，轻量稳定，仅含基础网络与常用管理插件，扩展插件按需自行安装" >> $GITHUB_ENV
           fi

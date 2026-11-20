@@ -71,6 +71,11 @@ if [[ "${WRT_PROFILE^^}" == "PLUS" ]]; then
 	#一代 PassWall 已由 PassWall2 取代，fork 者如需可取消注释，并同步启用 Config/GENERAL_AX6600_PLUS.txt 中对应配置段
 	#UPDATE_PACKAGE "passwall" "Openwrt-Passwall/openwrt-passwall" "main" "pkg"
 	UPDATE_PACKAGE "passwall2" "Openwrt-Passwall/openwrt-passwall2" "main" "pkg"
+	# OpenAppFilter（OAF）：DPI 应用识别/上网管控。必须从源码编译——官方源只有用户态
+	# appfilter，缺 kmod-oaf；官方 Release 的预编译 kmod 只到内核 6.12，而本机是 6.18。
+	# 克隆仓库后三个包（luci-app-oaf 界面 / appfilter 守护 / oaf 内核模块）随编译树带入，
+	# 同时删除 feeds 里同名的 luci-app-appfilter、oaf、appfilter，避免同名包双重定义。
+	UPDATE_PACKAGE "open-app-filter" "destan19/OpenAppFilter" "master" "" "luci-app-appfilter oaf appfilter"
 	# 分区扩容与网络唤醒：源码仅 PLUS 版拉取，PURE 纯净版不集成
 	UPDATE_PACKAGE "partexp" "sirpdboy/luci-app-partexp" "main"
 	UPDATE_PACKAGE "viking" "ones20250/packages" "main" "" "luci-app-timewol luci-app-wolplus luci-app-wolultra"

@@ -1,0 +1,46 @@
+#!/bin/sh
+# 由仓库 Files/ 在编译期注入 rootfs 的首次启动配置脚本。
+#
+# 目的：把 nlbwmon 的关键运行时配置在刷机/恢复出厂后自动配好，
+# 免得每次刷机都要手工重设。默认的 /etc/config/nlbwmon 不含这些值，
+# 且不在 sysupgrade 保留列表中；数据库文件本身在持久盘上（不受刷机影响）。
+#
+# 数值取自 2026-11-21 真机验证过的配置：
+#   - 数据库写到 partexp 扩展的持久分区 /mnt/mmcblk0p27（不随刷机清空）
+#   - 只统计 lan 网段，commit 间隔 1h，压缩落盘
+#   - 其余为压测后的调优项（netlink 缓冲、 generations/limit/interval）
+#
+# 只写这几项，不动 nlbwmon 包自带的其它默认项。
+# 注意：uci-defaults 每次刷机后的首次启动都会执行（执行后由 /etc/init.d/boot
+# 自动删除），也就是说日后在 LuCI 里改过的值，下次刷机会被这里重置回写死的默认。
+# 日常重启不会重复执行。
+# 目录由 /etc/init.d/nlbwmon 启动时 mkdir -p，此处不碰挂载。
+# 数据库目录依赖 partexp 扩展分区 /mnt/mmcblk0p27（本机已存在）。
+
+[ -x /etc/init.d/nlbwmon ] || exit 0
+
+# 包默认配置应已带匿名段；万一没有则补一个，保证下面 uci set 有落点。
+# 注意本机 uci 在配置文件不存在时 `uci add` 会报 Entry not found，
+# 所以先用 : > 建一个空文件（幂等，已存在时不截断——前面已判断无段才进来）。
+if ! uci -q get 'nlbwmon.@nlbwmon[0]' >/dev/null 2>&1; then
+	[ -f /etc/config/nlbwmon ] || : > /etc/config/nlbwmon
+	uci add nlbwmon nlbwmon >/dev/null 2>&1
+fi
+
+uci -q set 'nlbwmon.@nlbwmon[0].netlink_buffer_size'='524288'
+uci -q set 'nlbwmon.@nlbwmon[0].commit_interval'='1h'
+uci -q set 'nlbwmon.@nlbwmon[0].refresh_interval'='30s'
+uci -q set 'nlbwmon.@nlbwmon[0].database_directory'='/mnt/mmcblk0p27/nlbwmon'
+uci -q set 'nlbwmon.@nlbwmon[0].database_generations'='10'
+uci -q set 'nlbwmon.@nlbwmon[0].database_interval'='1'
+uci -q set 'nlbwmon.@nlbwmon[0].database_limit'='10000'
+uci -q set 'nlbwmon.@nlbwmon[0].protocol_database'='/usr/share/nlbwmon/protocols'
+uci -q set 'nlbwmon.@nlbwmon[0].database_compress'='1'
+
+# local_network 是 list 类型：先清后加，保证幂等且只有 lan 一条。
+uci -q delete 'nlbwmon.@nlbwmon[0].local_network'
+uci -q add_list 'nlbwmon.@nlbwmon[0].local_network'='lan'
+
+uci -q commit nlbwmon
+
+exit 0
